@@ -3,8 +3,6 @@ package io.github.haburashi76.wordQuiz.command
 import io.github.haburashi76.wordQuiz.Exam
 import io.github.haburashi76.wordQuiz.plugin.WordExamPlugin
 import io.github.monun.kommand.PluginKommand
-import net.kyori.adventure.text.Component
-import org.bukkit.command.CommandSender
 
 object KommandWordExam {
 
@@ -37,7 +35,7 @@ object KommandWordExam {
             then("start") {
                 then("exam" to examsArgument) {
                     then("player" to players()) {
-                        then("count" to int(0, 100)) {
+                        then("count" to int(minimum = 0)) {
                             executes {
                                 plugin.registerExam(
                                     it["exam"],

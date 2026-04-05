@@ -35,10 +35,21 @@ class WordExamPlugin : JavaPlugin() {
 
     fun registerExam(exam: Exam, players: List<Player>, count: Int) {
         if (!startedExams.keys.any { it.name == exam.name }) {
-            startedExams[exam] = players.map { it.uniqueId } to count-1
+            var newCount: Int? = null
+            if (count == 0) newCount = exam.wordTable.toList().flatMap { (key, valueList) ->
+                valueList.map { value ->
+                    key to value
+                }
+            }.size
+
+            startedExams[exam] = players.map { it.uniqueId } to (newCount?: count) -1
+
+            exam.numberOfQuestions = newCount?: (count)
+
             players.forEach {
                 exam.scoreboard[it.uniqueId] = 0
             }
+
             object : BukkitRunnable() {
                 override fun run() {
                     startExam(exam)
@@ -49,7 +60,6 @@ class WordExamPlugin : JavaPlugin() {
     }
 
     private fun startExam(exam: Exam) {
-
         val (uuids, count) = requireNotNull(startedExams[exam])
         val players = uuids.map { Bukkit.getPlayer(it)!! }
 
@@ -76,7 +86,6 @@ class WordExamPlugin : JavaPlugin() {
         players: List<Player>,
         remaining: Int
     ): BukkitRunnable {
-
         return object : BukkitRunnable() {
 
             val word =
@@ -85,8 +94,7 @@ class WordExamPlugin : JavaPlugin() {
                         usedWords.none { used ->
                             word.first == used.first && used.second == word.second
                         }
-                    }
-                    .random()
+                    }.random().first
 
             var ticks = 0
 
@@ -98,10 +106,14 @@ class WordExamPlugin : JavaPlugin() {
                 players.forEach { player ->
                     player.showTitle(
                         Title.title(
-                            Component.text(word.first),
+                            Component.text("${
+                                (exam.numberOfQuestions!!-remaining)
+                            }/${exam.numberOfQuestions} $word"),
                             Component.text().apply { base ->
+
                                 var i = 0
-                                usedWords.filter { it.first == word.first }.run {
+                                usedWords.filter { it.first == word }.run {
+                                    if (this.isNotEmpty()) base.append(Component.text("이미 나온 것: "))
                                     forEach {
                                         i++
                                         base.append(Component.text(it.second))
@@ -110,7 +122,6 @@ class WordExamPlugin : JavaPlugin() {
                                         }
                                     }
                                 }
-                                if (i > 0) base.append(Component.text(" 맞힘"))
                             }.build()
                         )
                     )
@@ -122,15 +133,14 @@ class WordExamPlugin : JavaPlugin() {
             var isRemoved = false
 
             override fun run() {
-
                 if (exam !in startedExams) {
                     isRemoved = true
                     cancel()
                 }
 
                 for ((uuid, message) in EventListener.chat) {
-                    if (message in exam.wordTable[word.first]!!
-                        && (message !in usedWords.filter { it.first == word.first }.map { it.second })) {
+                    if (message in exam.wordTable[word]!!
+                        && (message !in usedWords.filter { it.first == word }.map { it.second })) {
 
                         exam.scoreboard[uuid] = exam.scoreboard[uuid]!! + 1
                         b = true
@@ -144,7 +154,7 @@ class WordExamPlugin : JavaPlugin() {
                                 )
                             )
                         }
-                        usedWords.add(word.first to message)
+                        usedWords.add(word to message)
                         cancel()
                         break
                     }
@@ -152,13 +162,15 @@ class WordExamPlugin : JavaPlugin() {
 
                 EventListener.chat.clear()
 
-                if (ticks in listOf(55, 62)) {
+                val lengthBonus = word.length * 6
+
+                if (ticks in listOf(65+lengthBonus, 72+lengthBonus)) {
                     players.forEach {
                             player -> player.playSound(player, Sound.BLOCK_NOTE_BLOCK_COW_BELL, 2.0f, 1.189207f)
                     }
                 }
 
-                if (ticks == 69) cancel()
+                if (ticks == 79+lengthBonus) cancel()
 
                 ticks++
 
@@ -167,10 +179,22 @@ class WordExamPlugin : JavaPlugin() {
             override fun cancel() {
                 players.forEach { player ->
                     player.playSound(player, Sound.BLOCK_NOTE_BLOCK_COW_BELL, 2.0f, 1.587401f)
-                    if (!b) player.clearTitle()
+                    if (!b) {
+                        val showWord = exam.wordTable[word]!!.filter { s ->
+                            s !in usedWords.filter { it.first == word }.map { it.second }
+                        }.random()
+                        player.showTitle(
+                            Title.title(
+                                Component.text("정답: $showWord"),
+                                Component.text("")
+                            )
+                        )
+                        usedWords.add(word to showWord)
+                    }
                 }
 
-                if (remaining > 0 && usedWords.size < wordTableList.size && !isRemoved)  {
+                if (remaining > 0 && !isRemoved)  {
+                    if (usedWords.size >= wordTableList.size) usedWords.clear()
                     object : BukkitRunnable() {
                         override fun run() {
                             question(
@@ -183,24 +207,30 @@ class WordExamPlugin : JavaPlugin() {
                         }
                     }.runTaskLater(this@WordExamPlugin, 50L)
                 } else {
-                    players.forEach { player ->
-                        player.showTitle(
-                            Title.title(
-                                Component.text("종료!").color(NamedTextColor.AQUA),
-                                Component.text().apply { base ->
-                                    val sorted = players.sortedByDescending { exam.scoreboard[it.uniqueId]!! }
-                                    sorted.forEach { sortedPlayer ->
-                                        base.append(Component.text(
-                                            player.name +
-                                                    " ${exam.scoreboard[sortedPlayer.uniqueId]!!}점 "
+                    object : BukkitRunnable() {
+                        override fun run() {
+                            players.forEach { player ->
+                                player.showTitle(
+                                    Title.title(
+                                        Component.text("종료!").color(NamedTextColor.AQUA),
+                                        Component.text().apply { base ->
+                                            val sorted = players.sortedByDescending { exam.scoreboard[it.uniqueId]!! }
+                                            sorted.forEach { sortedPlayer ->
+                                                base.append(
+                                                    Component.text(
+                                                        player.name +
+                                                                " ${exam.scoreboard[sortedPlayer.uniqueId]!!}점 "
                                                     )
-                                        )
-                                    }
-                                }.color(NamedTextColor.GREEN).build()
-                            )
-                        )
-                    }
-                    startedExams.remove(exam)
+                                                )
+                                            }
+                                        }.color(NamedTextColor.GREEN).build()
+                                    )
+                                )
+                            }
+                            isRemoved = true
+                            startedExams.remove(exam)
+                        }
+                    }.runTaskLater(this@WordExamPlugin, 50L)
                 }
 
                 super.cancel()

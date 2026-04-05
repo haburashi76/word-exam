@@ -17,7 +17,7 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
 }
 
-val targetJavaVersion = 21
+val targetJavaVersion = 17
 
 kotlin {
     jvmToolchain(targetJavaVersion)

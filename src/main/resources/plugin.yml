@@ -1,5 +1,5 @@
-name: word-quiz
-version: '0.0.0'
+name: word-exam
+version: '0.0.1'
 main: io.github.haburashi76.wordQuiz.plugin.WordExamPlugin
 api-version: '1.20'
 libraries:
